@@ -3,28 +3,29 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-// reel scrolls symbol images down, then stops on the chosen result.
 public class Reel : MonoBehaviour
 {
-    [SerializeField] private Image[] symbolImages;      
-    [SerializeField] private float symbolHeight = 150f;
-    [SerializeField] private float maxSpeed = 2500f;   
+    [SerializeField] private Image[] symbolImages;
+    [SerializeField] private float symbolHeight = 100f;
+    [SerializeField] private float maxSpeed = 2500f;
     [SerializeField] private float accelerationTime = 0.25f;
-    [SerializeField] private float bounceAmount = 25f;
-    [SerializeField] private float bounceTime = 0.15f;
+
+    [Header("Landing bounce (damped spring)")]
+    [SerializeField] private float overshoot = 25f;        // how far it slides past the center
+    [SerializeField] private float bounceSpeed = 25f;      // how fast it wobbles
+    [SerializeField] private float bounceDamping = 7f;     // how fast the wobble dies out
+    [SerializeField] private float bounceTime = 0.6f;
 
     public bool IsSpinning { get; private set; }
 
     private List<SymbolData> symbols;
     private RandomNumberGenerator rng;
 
-    // Called once at the start by SlotMachineController
     public void Init(List<SymbolData> symbols, RandomNumberGenerator rng)
     {
         this.symbols = symbols;
         this.rng = rng;
 
-        // Stack images one below center, one in center, two above
         for (int i = 0; i < symbolImages.Length; i++)
         {
             symbolImages[i].rectTransform.anchoredPosition = new Vector2(0, (i - 1) * symbolHeight);
@@ -36,14 +37,13 @@ public class Reel : MonoBehaviour
     {
         IsSpinning = true;
 
-        // Accelerate
+        //Accelerate
         float t = 0;
         while (t < accelerationTime)
         {
             t += Time.deltaTime;
-            float speed = maxSpeed * (t / accelerationTime);
-            MoveImages(speed * Time.deltaTime);
-            yield return null;  
+            MoveImages(maxSpeed * (t / accelerationTime) * Time.deltaTime);
+            yield return null;
         }
 
         // Full speed
@@ -55,45 +55,40 @@ public class Reel : MonoBehaviour
             yield return null;
         }
 
-        // Slow down then put the result on the top image, bring it to the center
+        // Slow down, sliding slightly PAST the center
         Image target = GetTopImage();
         target.sprite = result.sprite;
 
-        float distance = target.rectTransform.anchoredPosition.y;
-        float stopTime = 3f * distance / maxSpeed;   // matches current speed, so no sudden jerk
+        float distance = target.rectTransform.anchoredPosition.y + overshoot;
+        float stopTime = 3f * distance / maxSpeed;
         float moved = 0;
         t = 0;
         while (t < stopTime)
         {
             t += Time.deltaTime;
             float progress = Mathf.Clamp01(t / stopTime);
-            float eased = 1f - Mathf.Pow(1f - progress, 3f);   // fast at first, slow at the end
-            float goal = distance * eased;
+            float goal = distance * (1f - Mathf.Pow(1f - progress, 3f));
             MoveImages(goal - moved);
             moved = goal;
             yield return null;
         }
 
-        //  Snap exactly to center
-        MoveImages(target.rectTransform.anchoredPosition.y);
-
-        //  Small bounce: dip down a bit, come back
+        // Spring back: each bounce smaller than the last
         t = 0;
-        float previous = 0;
         while (t < bounceTime)
         {
             t += Time.deltaTime;
-            float offset = bounceAmount * Mathf.Sin(Mathf.Clamp01(t / bounceTime) * Mathf.PI);
-            MoveImages(offset - previous);
-            previous = offset;
+            float wantedY = -overshoot * Mathf.Exp(-bounceDamping * t) * Mathf.Cos(bounceSpeed * t);
+            MoveImages(target.rectTransform.anchoredPosition.y - wantedY);
             yield return null;
         }
-        MoveImages(target.rectTransform.anchoredPosition.y);   // final snap
+
+        // Final snap exactly to center
+        MoveImages(target.rectTransform.anchoredPosition.y);
 
         IsSpinning = false;
     }
 
-    // Moves all images down. An image that leaves the bottom jumps to the top.
     private void MoveImages(float amount)
     {
         float bottomLimit = -1.5f * symbolHeight;
