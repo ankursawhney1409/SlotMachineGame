@@ -1,27 +1,31 @@
 using System.Collections.Generic;
 
-// Picks a symbol at random, using each symbol's weight.
+// Picks a random symbol for one reel, based on each symbol's weight.
 public class RandomNumberGenerator
 {
     private readonly System.Random random = new System.Random();
 
     public SymbolData PickSymbol(List<SymbolData> symbols)
     {
-        // Add up all weights of the symbols to make a 100
+        // Add up all weights
         int totalWeight = 0;
         foreach (SymbolData s in symbols)
             totalWeight += s.weight;
 
+        // Random number from 0 to 99
         int roll = random.Next(totalWeight);
 
-        // Walk through symbols until the roll falls in one's piece
+        // Find which symbol's range the roll falls in
+        // Seven: 0-4, Bar: 5-19, Bell: 20-49, Cherry: 50-99
+        int rangeEnd = 0;
         foreach (SymbolData s in symbols)
         {
-            if (roll < s.weight)
+            rangeEnd += s.weight;
+            if (roll < rangeEnd)
                 return s;
-            roll -= s.weight;
         }
 
-        return symbols[symbols.Count - 1]; // safety fallback, never reached
+        // Safety fallback (never reached)
+        return symbols[symbols.Count - 1];
     }
 }
